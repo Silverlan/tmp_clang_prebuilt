@@ -12,10 +12,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build clang
+      - name: Clone
         shell: bash
         run: |
           git clone https://github.com/llvm/llvm-project.git
+          
+      - name: Configure
+        shell: bash
+        run: |
           cd llvm-project
           mkdir build && cd build
 
@@ -26,4 +30,58 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="$PWD/install" \
             -DLLVM_ENABLE_ASSERTIONS=ON
 
+      - name: Build
+        shell: bash
+        run: |
+          cd llvm-project/build
           ninja clang
+
+      - name: Install
+        shell: bash
+        run: |
+          ninja install
+
+      - name: Create Release Archive
+        shell: bash
+        run: |
+          curDir="$PWD"
+          cd "llvm-project/build"
+          tar -czvf linux_x64.tar.gz *
+          mv "llvm-project/build/linux_x64.tar.gz" "$curDir/"
+
+      - name: Generate nightly tag description
+        shell: bash
+        run:   |
+          printf "Pre-built binaries for the latest version of clang." > tag_text.txt
+
+      - name: Compute build‐tag as today’s date
+        id: get_date
+        shell: bash
+        run: |
+          echo "date=$(TZ='Europe/Berlin' date +%F)" >> $GITHUB_OUTPUT
+          
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: "pragma-deps-lib"
+          
+      - name: Create Tag
+        uses: Silverlan/common_actions/create_tag@main
+        with:
+          tag_name: "${{ steps.get_date.outputs.date }}"
+          path: "pragma-deps-lib"
+
+      - name: Update nightly tag description
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          body_path: tag_text.txt
+          tag_name: "${{ steps.get_date.outputs.date }}"
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+
+      - name: Update nightly release
+        uses: pyTooling/Actions/releaser/composite@v4.2.2
+        with:
+          tag: "${{ steps.get_date.outputs.date }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: "linux_x64.tar.gz"
