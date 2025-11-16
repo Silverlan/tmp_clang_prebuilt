@@ -1,0 +1,112 @@
+name: Build clang-latest (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  setup-cmake:
+    runs-on: windows-latest
+    permissions:
+      actions: write
+      contents: write
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone
+        shell: pwsh
+        run: |
+          git clone https://github.com/llvm/llvm-project.git
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          Set-Location llvm-project
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          Set-Location build
+
+          cmake -G "Visual Studio 17 2022" ..\llvm `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DLLVM_ENABLE_PROJECTS="clang;lld" `
+            -DLLVM_TARGETS_TO_BUILD="X86" `
+            -DCMAKE_INSTALL_PREFIX="${PWD}\install" `
+            -DLLVM_ENABLE_ASSERTIONS=OFF
+
+      - name: Build
+        shell: pwsh
+        run: |
+          Set-Location llvm-project\build
+          cmake --build . --config Release --target clang
+
+      - name: Install
+        shell: pwsh
+        run: |
+          Set-Location llvm-project\build
+          cmake --install . --config Release
+
+          # Ensure libc++ headers (if present) are copied similarly to the Linux flow
+          New-Item -ItemType Directory -Force -Path install\include\c++\v1 | Out-Null
+          if (Test-Path ..\libcxx\include) {
+            Copy-Item -Recurse -Force ..\libcxx\include\* install\include\c++\v1\
+          }
+
+      - name: Create Release Archive
+        shell: pwsh
+        run: |
+          Set-Location llvm-project\build
+          Move-Item -Force install LLVM-22.git-Windows-X64
+
+          Compress-Archive -Path `
+            .\LLVM-22.git-Windows-X64\bin,`
+            .\LLVM-22.git-Windows-X64\lib,`
+            .\LLVM-22.git-Windows-X64\include,`
+            .\LLVM-22.git-Windows-X64\libexec,`
+            .\LLVM-22.git-Windows-X64\share `
+            -DestinationPath windows_x64.zip -Force
+
+          Move-Item windows_x64.zip $env:GITHUB_WORKSPACE
+
+      - name: Generate nightly tag description
+        shell: pwsh
+        run: |
+          "Pre-built binaries for the latest version of clang." | Out-File -FilePath tag_text.txt -Encoding utf8
+
+      - name: Compute build‐tag as today’s date
+        id: get_date
+        shell: bash
+        run: |
+          echo "date=$(TZ='Europe/Berlin' date +%F)" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: "pragma-deps-lib"
+
+      - name: Create Tag
+        uses: Silverlan/common_actions/create_tag@main
+        with:
+          tag_name: "${{ steps.get_date.outputs.date }}"
+          path: "pragma-deps-lib"
+
+      - name: Update nightly tag description
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          body_path: tag_text.txt
+          tag_name: "${{ steps.get_date.outputs.date }}"
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+
+      - name: Update nightly release
+        uses: pyTooling/Actions/releaser/composite@v4.2.2
+        with:
+          tag: "${{ steps.get_date.outputs.date }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: "windows_x64.zip"

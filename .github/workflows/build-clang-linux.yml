@@ -1,4 +1,4 @@
-name: Build clang-latest
+name: Build clang-latest (Linux)
 
 on:
   workflow_dispatch:
