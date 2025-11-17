@@ -31,11 +31,10 @@ jobs:
           cd llvm-project
           mkdir -p build && cd build
 
-          # Use the same generator and options as the Linux workflow (Ninja + same projects/runtimes)
+          # Windows: build clang + lld only (do not build runtimes here).
           cmake -G Ninja ../llvm \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
-            -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind;compiler-rt" \
             -DLLVM_TARGETS_TO_BUILD="X86" \
             -DCMAKE_INSTALL_PREFIX="$PWD/install" \
             -DLLVM_ENABLE_ASSERTIONS=OFF
@@ -50,8 +49,8 @@ jobs:
         shell: bash
         run: |
           cd llvm-project/build
-          # Install the clang target and the runtimes/stdlibs used on Linux workflow
-          ninja install-clang install-cxx install-cxxabi install-compiler-rt
+          # install just clang (no runtimes)
+          ninja install-clang
 
       - name: Create Release Archive
         shell: bash
@@ -68,7 +67,7 @@ jobs:
         run: |
           printf "Pre-built binaries for the latest version of clang." > tag_text.txt
 
-      - name: Compute build‐tag as today’s date
+      - name: Compute build-tag as today's date
         id: get_date
         shell: bash
         run: |
