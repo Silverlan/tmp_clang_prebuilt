@@ -37,20 +37,21 @@ jobs:
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD="X86" \
             -DCMAKE_INSTALL_PREFIX="$PWD/install" \
-            -DLLVM_ENABLE_ASSERTIONS=OFF
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DLLVM_INSTALL_UTILS=ON \
+            -DLLVM_INSTALL_BINUTILS_SYMLINKS=ON
 
       - name: Build
         shell: bash
         run: |
           cd llvm-project/build
-          ninja clang
+          ninja
 
       - name: Install
         shell: bash
         run: |
           cd llvm-project/build
-          # install just clang (no runtimes)
-          ninja install-clang
+          cmake --install .
 
       - name: Create Release Archive
         shell: bash
