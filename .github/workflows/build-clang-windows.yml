@@ -25,6 +25,11 @@ jobs:
         run: |
           git clone https://github.com/llvm/llvm-project.git
 
+      - name: Setup Visual Studio Developer Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
       - name: Configure
         shell: bash
         run: |
@@ -32,7 +37,7 @@ jobs:
           mkdir -p build && cd build
 
           # Windows: build clang + lld only (do not build runtimes here).
-          cmake -G Ninja ../llvm \
+          cmake -G "Visual Studio 17 2022" -A x64 ../llvm \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD="X86" \
@@ -51,7 +56,7 @@ jobs:
         shell: bash
         run: |
           cd llvm-project/build
-          cmake --install .
+          cmake --build . --config Release --target INSTALL -- /m
 
       - name: Create Release Archive
         shell: bash
