@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           cd llvm-project/build
-          cmake --build . --config Release --target INSTALL -- /m
+          cmake --build . --config Release --target INSTALL
 
       - name: Create Release Archive
         shell: bash
