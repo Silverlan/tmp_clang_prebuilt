@@ -46,12 +46,6 @@ jobs:
             -DLLVM_INSTALL_UTILS=ON \
             -DLLVM_INSTALL_BINUTILS_SYMLINKS=ON
 
-      - name: Build
-        shell: bash
-        run: |
-          cd llvm-project/build
-          ninja
-
       - name: Install
         shell: bash
         run: |
