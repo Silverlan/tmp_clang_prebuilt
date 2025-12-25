@@ -2,8 +2,11 @@ name: Build clang-latest (Windows)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
+    inputs:
+      clang_sha:
+        description: 'Commit SHA for clang (optional). If empty, workflow will build the latest.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -24,6 +27,13 @@ jobs:
         shell: bash
         run: |
           git clone https://github.com/llvm/llvm-project.git
+          # If an explicit clang commit SHA was provided as an input, check it out.
+          if [ -n "${{ github.event.inputs.clang_sha }}" ]; then
+            echo "Checking out requested clang SHA: ${{ github.event.inputs.clang_sha }}"
+            git -C llvm-project checkout "${{ github.event.inputs.clang_sha }}"
+          else
+            echo "No clang SHA provided — using latest (default branch HEAD)."
+          fi
 
       - name: Setup Visual Studio Developer Prompt
         uses: ilammy/msvc-dev-cmd@v1
@@ -67,11 +77,27 @@ jobs:
         run: |
           printf "Pre-built binaries for the latest version of clang." > tag_text.txt
 
-      - name: Compute build-tag as today's date
+      - name: Compute build-tag as today's date and clang sha
         id: get_date
         shell: bash
         run: |
-          echo "date=$(TZ='Europe/Berlin' date +%F)" >> $GITHUB_OUTPUT
+          # date in Europe/Berlin
+          date_val="$(TZ='Europe/Berlin' date +%F)"
+
+          # If user provided clang_sha input, prefer that (shorten to 8 chars for tag).
+          if [ -n "${{ github.event.inputs.clang_sha }}" ]; then
+            # Use the first 8 characters of the provided SHA to keep the tag compact.
+            commit_short="$(echo "${{ github.event.inputs.clang_sha }}" | cut -c1-8)"
+          else
+            # No input: derive the checked-out commit in the cloned llvm-project repo.
+            commit_short="$(git -C llvm-project rev-parse --short=8 HEAD)"
+          fi
+
+          tag_name="${date_val}-${commit_short}"
+
+          echo "date=${date_val}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${commit_short}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag_name}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         with:
@@ -81,20 +107,20 @@ jobs:
       - name: Create Tag
         uses: Silverlan/common_actions/create_tag@main
         with:
-          tag_name: "${{ steps.get_date.outputs.date }}"
+          tag_name: "${{ steps.get_date.outputs.tag }}"
           path: "pragma-deps-lib"
 
       - name: Update nightly tag description
         uses: softprops/action-gh-release@v0.1.15
         with:
           body_path: tag_text.txt
-          tag_name: "${{ steps.get_date.outputs.date }}"
+          tag_name: "${{ steps.get_date.outputs.tag }}"
           target_commitish: ${{ github.sha }}
           prerelease: true
 
       - name: Update nightly release
         uses: pyTooling/Actions/releaser/composite@v4.2.2
         with:
-          tag: "${{ steps.get_date.outputs.date }}"
+          tag: "${{ steps.get_date.outputs.tag }}"
           token: ${{ secrets.GITHUB_TOKEN }}
           files: "windows_x64.tar.xz"
